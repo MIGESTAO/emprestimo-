@@ -9,6 +9,7 @@
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
   <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
   <style>
+/* Estilo global */
 body {
   background-color: #eaeef3; /* Fundo mais claro e suave */
   color: #1f2d3d; /* Texto escuro com contraste */
@@ -34,19 +35,19 @@ h1 {
   background-color: #ffffff; /* Fundo branco para cards */
   border: none;
   border-radius: 15px;
-  box-shadow: 0 6px 25px rgba(0, 0, 0, 0.15); /* Sombra mais suave e profunda */
+  box-shadow: 0 6px 25px rgba(0, 0, 0, 0.15); /* Sombra suave e profunda */
   transition: transform 0.3s, box-shadow 0.3s;
   animation: slideIn 1s ease-in-out;
 }
 
 .card:hover {
-  transform: translateY(-15px); /* Efeito de elevação mais intenso */
+  transform: translateY(-15px); /* Efeito de elevação */
   box-shadow: 0 15px 40px rgba(0, 0, 0, 0.25); /* Sombra mais densa */
 }
 
 #resumoFinanceiro {
   margin-bottom: 50px;
-  background: linear-gradient(135deg, #dfe6e9, #b2bec3); /* Gradiente moderno e suave */
+  background: linear-gradient(135deg, #dfe6e9, #b2bec3); /* Gradiente moderno */
   border-radius: 15px;
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
   padding: 35px;
@@ -65,24 +66,36 @@ h5 {
   color: #e74c3c; /* Vermelho vibrante para dívidas */
   font-weight: bold;
   font-size: 1.7em;
+  animation: popUp 1s ease;
 }
 
 #totalJuros {
   color: #f1c40f; /* Amarelo ouro para juros */
   font-weight: bold;
   font-size: 1.7em;
+  animation: popUp 1.1s ease;
 }
 
 #totalReembolsos {
   color: #2ecc71; /* Verde brilhante para reembolsos */
   font-weight: bold;
   font-size: 1.7em;
+  animation: popUp 1.2s ease;
 }
 
 #saldoDisponivel {
   color: #3498db; /* Azul moderno para saldo */
   font-weight: bold;
   font-size: 1.7em;
+  animation: popUp 1.3s ease;
+}
+
+.text-danger {
+  color: #e74c3c; /* Vermelho moderno para status "Em Dívida" */
+}
+
+.text-success {
+  color: #2ecc71; /* Verde claro para status "Nenhuma Dívida" */
 }
 
 input.form-control {
@@ -135,19 +148,49 @@ input.form-control:focus {
   transform: translateY(-3px); /* Efeito de elevação suave */
 }
 
-.text-success {
-  color: #2ecc71; /* Verde claro moderno */
+/* Estilo para o histórico */
+.historico {
+  margin-top: 20px;
+  padding: 20px;
+  background-color: #f8f9fa;
+  border-radius: 10px;
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+  animation: fadeIn 1.5s ease-in-out;
 }
 
-.text-danger {
-  color: #e74c3c; /* Vermelho moderno */
+.historico h6 {
+  font-weight: 600;
+  margin-bottom: 15px;
+  color: #16a085;
 }
 
-.input-group {
-  margin-bottom: 35px;
-  animation: fadeIn 1.2s ease-in-out;
+.historico p {
+  font-size: 1.1em;
+  margin-bottom: 10px;
 }
 
+/* Adicionando animações suaves */
+@keyframes fadeIn {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+@keyframes slideIn {
+  0% { transform: translateY(30px); opacity: 0; }
+  100% { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes zoomIn {
+  0% { transform: scale(0.9); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes popUp {
+  0% { transform: scale(0.9); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* Estilos responsivos */
 @media (max-width: 768px) {
   h1 {
     font-size: 2.8em;
@@ -166,21 +209,6 @@ input.form-control:focus {
   }
 }
 
-/* Adicionando animações suaves */
-@keyframes fadeIn {
-  0% { opacity: 0; }
-  100% { opacity: 1; }
-}
-
-@keyframes slideIn {
-  0% { transform: translateY(30px); opacity: 0; }
-  100% { transform: translateY(0); opacity: 1; }
-}
-
-@keyframes zoomIn {
-  0% { transform: scale(0.9); opacity: 0; }
-  100% { transform: scale(1); opacity: 1; }
-}
 
 
   </style>
@@ -232,7 +260,7 @@ input.form-control:focus {
     const db = firebase.database();
 
     // Inicializando o saldo com depósito inicial
-    const depositoInicial = 10000; // Defina o valor do depósito inicial aqui
+    const depositoInicial = 0; // Defina o valor do depósito inicial aqui
 
     // Carregar ou inicializar o resumo financeiro no Firebase
     function inicializarResumo() {
@@ -311,15 +339,17 @@ input.form-control:focus {
         alert('Valor inválido');
         return;
       }
+      const jurosPercentual = parseFloat(prompt('Digite a taxa de juros (%):')) / 100;
+      if (isNaN(jurosPercentual) || jurosPercentual <= 0) {
+        alert('Taxa de juros inválida');
+        return;
+      }
 
       // Verificar se o saldo disponível no Firebase é suficiente
       db.ref('resumo/saldoDisponivel').once('value').then((snapshot) => {
         let saldoDisponivel = snapshot.val();
 
-        if (valor > saldoDisponivel) {
-          alert('Saldo insuficiente');
-          return;
-        }
+       
 
         const juros = valor * 0.2; // Juros de 20%
         const totalPagar = valor + juros;
