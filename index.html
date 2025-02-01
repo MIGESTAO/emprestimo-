@@ -11,25 +11,26 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-storage.js"></script>
     <style>
-      body {
-    background-image: url("img/vip.webp");
-    background-size: cover; /* Ajusta a imagem para cobrir toda a tela */
-    background-position: center; /* Centraliza a imagem */
-    background-repeat: no-repeat; /* Evita repetição da imagem */
-}
-
+        body {
+            background-image: url("img/vip.webp");
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+        }
         .container {
-            max-width: 800px; /* Ajusta a largura máxima do contêiner */
+            max-width: 800px;
             margin-top: 20px;
         }
         .card-cliente {
             margin-bottom: 15px;
-            padding: 15px;
+            padding: 10px;
             border: 1px solid #ccc;
             border-radius: 10px;
             background: #fff;
             transition: transform 0.2s;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            max-width: 100%; /* Limita a largura máxima */
+            font-size: 0.9em; /* Reduz o tamanho da fonte */
         }
         .card-cliente:hover {
             transform: scale(1.02);
@@ -56,7 +57,7 @@
             transform: scale(1.02);
         }
         .img-preview {
-            max-width: 100px; /* Limita a largura da imagem */
+            max-width: 80px; /* Reduz o tamanho da imagem de garantia */
             margin-top: 10px;
             border-radius: 5px;
             box-shadow: 0 1px 5px rgba(0, 0, 0, 0.2);
@@ -68,12 +69,12 @@
             border-radius: 5px;
         }
         .foto-perfil {
-            width: 60px; /* Tamanho da foto de perfil */
-            height: 60px; /* Tamanho da foto de perfil */
-            border-radius: 50%; /* Formato redondo */
-            object-fit: cover; /* Cobre o espaço sem distorcer */
-            border: 2px solid #ccc; /* Borda da foto */
-            cursor: pointer; /* Muda o cursor para indicar que é clicável */
+            width: 50px; /* Reduz o tamanho da foto de perfil */
+            height: 50px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid #ccc;
+            cursor: pointer;
         }
         .status-ativo {
             color: green;
@@ -83,7 +84,7 @@
             margin-top: 10px;
         }
         .foto-perfil-zoom {
-            display: none; /* Inicialmente escondido */
+            display: none;
             position: fixed;
             top: 50%;
             left: 50%;
@@ -97,18 +98,26 @@
             max-width: 90%;
             max-height: 90%;
         }
-        h2{
-            box-shadow:rgb(196, 15, 15) ;
-            color: #ffffff;
-            background-color: rgb(45, 0, 247);
+        h2 {
+            box-shadow: rgb(196, 15, 15);
+            color: #053fdf;
+            background-color: #ffffff;
+            padding: 10px;
+            border-radius: 5px;
         }
-        h4{
-            box-shadow:rgb(196, 15, 15) ;
+        h4 {
+            box-shadow: rgb(196, 15, 15);
             color: #000000;
             background-color: rgb(115, 255, 0);
             font-family: algerian;
             font-style: italic;
-        
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .loading {
+            display: none;
+            text-align: center;
+            margin-top: 20px;
         }
     </style>
 </head>
@@ -134,6 +143,9 @@
                 <input type="file" id="imagemGarantia" class="form-control" accept="image/*">
             </div>
             <button class="btn btn-primary" onclick="emprestar()"><i class="fas fa-plus"></i> Emprestar</button>
+            <div class="loading" id="loading">
+                <i class="fas fa-spinner fa-spin"></i> Carregando...
+            </div>
         </div>
         
         <h4 class="mt-4"><i class="fas fa-list"></i> Lista de Clientes</h4>
@@ -146,6 +158,7 @@
             <li><strong>Total de Reembolsos:</strong> <span id="totalReembolsos">0.00</span></li>
             <li><strong>Saldo Disponível:</strong> <span id="saldoDisponivel">0.00</span></li>
         </ul>
+        <button class="btn btn-info" onclick="atualizarSaldo()"><i class="fas fa-edit"></i> Atualizar Saldo Disponível</button>
     </div>
 
     <div class="foto-perfil-zoom" id="fotoPerfilZoom" onclick="fecharZoom()">
@@ -168,6 +181,8 @@
         const db = firebase.database();
         const storage = firebase.storage();
 
+        let usuarioNome = null; // Variável para armazenar o nome do usuário
+
         function emprestar() {
             let nome = document.getElementById("nome").value;
             let valor = parseFloat(document.getElementById("valor").value);
@@ -182,41 +197,64 @@
                 return;
             }
 
-            // Upload da foto de perfil
-            let fotoPerfilRef = storage.ref(`fotosPerfil/${nome}_${Date.now()}`);
-            let imagemGarantiaRef = storage.ref(`imagensGarantia/${nome}_${Date.now()}`);
+            // Verifica se o saldo disponível é suficiente
+            db.ref("saldoDisponivel").once("value", (snapshot) => {
+                let saldo = snapshot.val() || 0;
+                if (saldo < valor) {
+                    Swal.fire('Erro', 'Saldo insuficiente para realizar o empréstimo!', 'error');
+                    return;
+                }
 
-            let uploadTasks = [];
+                // Exibe animação de carregamento
+                document.getElementById("loading").style.display = "block";
 
-            if (fotoPerfil) {
-                uploadTasks.push(fotoPerfilRef.put(fotoPerfil).then(snapshot => snapshot.ref.getDownloadURL()));
-            } else {
-                uploadTasks.push(Promise.resolve(null)); // Se não houver foto, resolve com null
-            }
+                // Upload da foto de perfil
+                let fotoPerfilRef = storage.ref(`fotosPerfil/${nome}_${Date.now()}`);
+                let imagemGarantiaRef = storage.ref(`imagensGarantia/${nome}_${Date.now()}`);
 
-            if (imagemGarantia) {
-                uploadTasks.push(imagemGarantiaRef.put(imagemGarantia).then(snapshot => snapshot.ref.getDownloadURL()));
-            } else {
-                uploadTasks.push(Promise.resolve(null)); // Se não houver imagem, resolve com null
-            }
+                let uploadTasks = [];
 
-            Promise.all(uploadTasks).then(urls => {
-                let novoEmprestimo = db.ref("emprestimos").push();
-                novoEmprestimo.set({
-                    nome: nome,
-                    valor: valor,
-                    totalPagar: totalPagar,
-                    status: "Pendente",
-                    data: dataEmprestimo,
-                    historicoReembolsos: [],
-                    historicoAdicoes: [],
-                    fotoPerfil: urls[0], // URL da foto de perfil
-                    imagemGarantia: urls[1] // URL da imagem de garantia
+                if (fotoPerfil) {
+                    uploadTasks.push(fotoPerfilRef.put(fotoPerfil).then(snapshot => snapshot.ref.getDownloadURL()));
+                } else {
+                    uploadTasks.push(Promise.resolve(null)); // Se não houver foto, resolve com null
+                }
+
+                if (imagemGarantia) {
+                    uploadTasks.push(imagemGarantiaRef.put(imagemGarantia).then(snapshot => snapshot.ref.getDownloadURL()));
+                } else {
+                    uploadTasks.push(Promise.resolve(null)); // Se não houver imagem, resolve com null
+                }
+
+                Promise.all(uploadTasks).then(urls => {
+                    let novoEmprestimo = db.ref("emprestimos").push();
+                    novoEmprestimo.set({
+                        nome: nome,
+                        valor: valor,
+                        totalPagar: totalPagar,
+                        status: "Pendente",
+                        data: dataEmprestimo,
+                        historicoReembolsos: [],
+                        historicoAdicoes: [],
+                        fotoPerfil: urls[0], // URL da foto de perfil
+                        imagemGarantia: urls[1], // URL da imagem de garantia
+                        comentarios: [] // Inicializa a lista de comentários
+                    });
+
+                    // Atualiza o saldo disponível
+                    let novoSaldo = saldo - valor;
+                    db.ref("saldoDisponivel").set(novoSaldo); // Atualiza o saldo no Firebase
+
+                    // Limpa os campos
+                    document.getElementById("nome").value = "";
+                    document.getElementById("valor").value = "";
+                    document.getElementById("fotoPerfil").value = "";
+                    document.getElementById("imagemGarantia").value = "";
+                    atualizarSaldoDisponivel(); // Atualiza a exibição do saldo
+
+                    // Esconde a animação de carregamento
+                    document.getElementById("loading").style.display = "none";
                 });
-                document.getElementById("nome").value = "";
-                document.getElementById("valor").value = "";
-                document.getElementById("fotoPerfil").value = "";
-                document.getElementById("imagemGarantia").value = "";
             });
         }
 
@@ -251,14 +289,23 @@
                                 ${data.imagemGarantia ? `<img src="${data.imagemGarantia}" alt="Imagem de Garantia" class="img-preview"><p>Item de Garantia</p>` : ''}
                             </div>
                             <button class="btn btn-success btn-sm" onclick="reembolsar('${childSnapshot.key}', ${data.totalPagar})"><i class="fas fa-dollar-sign"></i> Reembolsar</button>
-                            <button class="btn btn-warning btn-sm" onclick="adicionarValor('${childSnapshot.key}', ${data.valor})"><i class="fas fa-plus-circle"></i> Adicionar Valor</button>
+                            <button class="btn btn-warning btn-sm" onclick="adicionarValor('${childSnapshot.key}', ${data.valor}, '${data.status}')"><i class="fas fa-plus-circle"></i> Adicionar Valor</button>
                             <button class="btn btn-danger btn-sm" onclick="excluirEmprestimo('${childSnapshot.key}')"><i class="fas fa-trash"></i> Excluir</button>
                             <h6>Histórico de Reembolsos:</h6>
                             <ul>${historicoReembolsos}</ul>
                             <h6>Histórico de Adições:</h6>
                             <ul>${historicoAdicoes}</ul>
+                            <div class="comment-section">
+                                <h6>Comentários:</h6>
+                                <div id="comentarios-${childSnapshot.key}"></div>
+                                <input type="text" id="novoComentario-${childSnapshot.key}" class="form-control" placeholder="Adicionar um comentário">
+                                <button class="btn btn-primary btn-sm mt-2" onclick="adicionarComentario('${childSnapshot.key}')">Comentar</button>
+                            </div>
                         </div>`;
                     
+                    // Carregar comentários
+                    carregarComentarios(childSnapshot.key, data.comentarios);
+
                     // Atualiza o total de dívidas
                     totalDividas += data.totalPagar;
                 });
@@ -271,6 +318,98 @@
             });
         }
 
+        function carregarComentarios(id, comentarios) {
+            const comentariosDiv = document.getElementById(`comentarios-${id}`);
+            comentariosDiv.innerHTML = comentarios.map(comentario => `
+                <div class="comment">
+                    ${comentario.texto}
+                    <div class="emoji-buttons">
+                        <button class="emoji-button" onclick="reagirComentario('${id}', '${comentario.texto}', '👍')">👍</button>
+                        <span class="reaction-count">${comentario.reacoes.like || 0}</span>
+                        <button class="emoji-button" onclick="reagirComentario('${id}', '${comentario.texto}', '👎')">👎</button>
+                        <span class="reaction-count">${comentario.reacoes.dislike || 0}</span>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function adicionarComentario(id) {
+            const comentarioInput = document.getElementById(`novoComentario-${id}`);
+            const comentarioTexto = comentarioInput.value.trim();
+
+            if (comentarioTexto === "") {
+                Swal.fire('Erro', 'O comentário não pode estar vazio!', 'error');
+                return;
+            }
+
+            // Se o usuário ainda não tiver comentado, pede o nome
+            if (!usuarioNome) {
+                Swal.fire({
+                    title: 'Informe seu nome',
+                    input: 'text',
+                    inputPlaceholder: 'Seu nome',
+                    showCancelButton: true,
+                    confirmButtonText: 'Comentar',
+                    preConfirm: (nome) => {
+                        if (!nome) {
+                            Swal.showValidationMessage('Por favor, insira seu nome');
+                        } else {
+                            usuarioNome = nome; // Armazena o nome do usuário
+                            return nome;
+                        }
+                    }
+                }).then((result) => {
+                    if (result.isConfirmed) {
+                        const comentario = {
+                            texto: `${usuarioNome}: ${comentarioTexto}`,
+                            reacoes: { like: 0, dislike: 0 } // Inicializa contadores de reações
+                        };
+
+                        db.ref(`emprestimos/${id}/comentarios`).once("value", (snapshot) => {
+                            let comentarios = snapshot.val() || [];
+                            comentarios.push(comentario);
+                            db.ref(`emprestimos/${id}`).update({ comentarios: comentarios });
+                            comentarioInput.value = ""; // Limpa o campo de entrada
+                            carregarEmprestimos(); // Recarrega a lista de empréstimos para atualizar os comentários
+                        });
+                    }
+                });
+            } else {
+                const comentario = {
+                    texto: `${usuarioNome}: ${comentarioTexto}`,
+                    reacoes: { like: 0, dislike: 0 } // Inicializa contadores de reações
+                };
+
+                db.ref(`emprestimos/${id}/comentarios`).once("value", (snapshot) => {
+                    let comentarios = snapshot.val() || [];
+                    comentarios.push(comentario);
+                    db.ref(`emprestimos/${id}`).update({ comentarios: comentarios });
+                    comentarioInput.value = ""; // Limpa o campo de entrada
+                    carregarEmprestimos(); // Recarrega a lista de empréstimos para atualizar os comentários
+                });
+            }
+        }
+
+        function reagirComentario(id, comentarioTexto, reacao) {
+            db.ref(`emprestimos/${id}/comentarios`).once("value", (snapshot) => {
+                let comentarios = snapshot.val() || [];
+                const comentarioIndex = comentarios.findIndex(c => c.texto === comentarioTexto);
+                if (comentarioIndex !== -1) {
+                    // Verifica se o usuário já reagiu
+                    if (comentarios[comentarioIndex].reacoes[reacao] === undefined) {
+                        comentarios[comentarioIndex].reacoes[reacao] = 0; // Inicializa se não existir
+                    }
+                    if (reacao === '👍' && comentarios[comentarioIndex].reacoes.like === 0) {
+                        comentarios[comentarioIndex].reacoes.like++;
+                    } else if (reacao === '👎' && comentarios[comentarioIndex].reacoes.dislike === 0) {
+                        comentarios[comentarioIndex].reacoes.dislike++;
+                    }
+                    db.ref(`emprestimos/${id}`).update({ comentarios: comentarios });
+                    carregarEmprestimos(); // Recarrega a lista de empréstimos para atualizar os comentários
+                }
+            });
+        }
+
         function atualizarSaldoDisponivel() {
             db.ref("saldoDisponivel").once("value", (snapshot) => {
                 let saldo = snapshot.val() || 0;
@@ -278,62 +417,164 @@
             });
         }
 
-        function reembolsar(id, total) {
+        function atualizarSaldo() {
             Swal.fire({
-                title: 'Reembolsar',
+                title: 'Atualizar Saldo Disponível',
                 input: 'number',
                 showCancelButton: true,
-                confirmButtonText: 'Confirmar',
-                preConfirm: (valorPago) => {
-                    valorPago = parseFloat(valorPago);
-                    if (isNaN(valorPago) || valorPago <= 0) {
+                confirmButtonText: 'Atualizar',
+                preConfirm: (valor) => {
+                    valor = parseFloat(valor);
+                    if (isNaN(valor) || valor < 0) {
                         Swal.fire('Erro', 'Insira um valor válido!', 'error');
                         return;
                     }
-                    db.ref(`emprestimos/${id}`).once("value", (snapshot) => {
-                        let data = snapshot.val();
-                        let restante = data.totalPagar - valorPago;
-                        let historico = data.historicoReembolsos || [];
-                        historico.push(`${new Date().toLocaleDateString()} - Reembolsado: ${valorPago}`);
-                        let status = restante <= 0 ? "Pago" : "Pendente";
-                        db.ref(`emprestimos/${id}`).update({ 
-                            totalPagar: Math.max(0, restante), 
-                            status, 
-                            historicoReembolsos: historico 
-                        });
-
-                        // Atualiza o total de reembolsos
-                        let totalReembolsos = parseFloat(document.getElementById("totalReembolsos").innerText) + valorPago;
-                        document.getElementById("totalReembolsos").innerText = totalReembolsos.toFixed(2);
+                    Swal.fire({
+                        title: 'Digite a senha',
+                        input: 'password',
+                        inputPlaceholder: 'Senha',
+                        showCancelButton: true,
+                        confirmButtonText: 'Confirmar',
+                        preConfirm: (senha) => {
+                            if (senha !== 'xitique') {
+                                Swal.showValidationMessage('Senha incorreta!');
+                            }
+                        }
+                    }).then((result) => {
+                        if (result.isConfirmed) {
+                            db.ref("saldoDisponivel").set(valor).then(() => {
+                                Swal.fire('Sucesso!', 'Saldo atualizado com sucesso.', 'success');
+                                atualizarSaldoDisponivel(); // Atualiza a exibição do saldo
+                            }).catch((error) => {
+                                Swal.fire('Erro!', 'Ocorreu um erro ao atualizar o saldo.', 'error');
+                            });
+                        }
                     });
                 }
             });
         }
-        
-        function adicionarValor(id, valorAtual) {
-            Swal.fire({
-                title: 'Adicionar Valor',
-                input: 'number',
-                showCancelButton: true,
-                confirmButtonText: 'Adicionar',
-                preConfirm: (valorAdicionado) => {
-                    valorAdicionado = parseFloat(valorAdicionado);
-                    if (isNaN(valorAdicionado) || valorAdicionado <= 0) {
-                        Swal.fire('Erro', 'Insira um valor válido!', 'error');
-                        return;
-                    }
-                    db.ref(`emprestimos/${id}`).once("value", (snapshot) => {
-                        let data = snapshot.val();
-                        let historico = data.historicoAdicoes || [];
-                        historico.push(`${new Date().toLocaleDateString()} - Adicionado: ${valorAdicionado}`);
-                        db.ref(`emprestimos/${id}`).update({ 
-                            valor: data.valor + valorAdicionado, 
-                            totalPagar: (data.valor + valorAdicionado) * 1.2, 
-                            historicoAdicoes: historico 
-                        });
-                    });
+
+        function reembolsar(id, total) {
+    db.ref(`emprestimos/${id}`).once("value", (snapshot) => {
+        let data = snapshot.val();
+        let valorMaximo = data.totalPagar; // O valor máximo que pode ser reembolsado
+
+        Swal.fire({
+            title: 'Reembolsar',
+            input: 'number',
+            showCancelButton: true,
+            confirmButtonText: 'Confirmar',
+            preConfirm: (valorPago) => {
+                valorPago = parseFloat(valorPago);
+                if (isNaN(valorPago) || valorPago <= 0 || valorPago > valorMaximo) {
+                    Swal.fire('Erro', 'Insira um valor válido e que não exceda a dívida!', 'error');
+                    return;
                 }
-            });
+                let restante = data.totalPagar - valorPago; // Calcula o restante da dívida
+                let novoTotalPagar = restante + (restante * 0.2); // Recalcula o total a pagar com juros de 20%
+                let historico = data.historicoReembolsos || [];
+                historico.push(`${new Date().toLocaleDateString()} - Reembolsado: ${valorPago}`);
+                let status = novoTotalPagar <= 0 ? "Pago" : "Pendente"; // Atualiza o status
+                
+                // Atualiza o saldo disponível
+                let novoSaldo = parseFloat(document.getElementById("saldoDisponivel").innerText) + valorPago;
+                db.ref("saldoDisponivel").set(novoSaldo); // Atualiza o saldo no Firebase
+
+                db.ref(`emprestimos/${id}`).update({ 
+                    totalPagar: Math.max(0, novoTotalPagar), // Atualiza o total a pagar
+                    status, 
+                    historicoReembolsos: historico 
+                });
+
+                // Atualiza o total de reembolsos
+                let totalReembolsos = parseFloat(document.getElementById("totalReembolsos").innerText) + valorPago;
+                document.getElementById("totalReembolsos").innerText = totalReembolsos.toFixed(2);
+                
+                // Atualiza o saldo disponível na interface
+                atualizarSaldoDisponivel();
+            }
+        });
+    });
+}
+        
+        function adicionarValor(id, valorAtual, status) {
+            if (status === "Pago") {
+                Swal.fire({
+                    title: 'Adicionar Novo Empréstimo',
+                    input: 'number',
+                    showCancelButton: true,
+                    confirmButtonText: 'Adicionar',
+                    preConfirm: (valorAdicionado) => {
+                        valorAdicionado = parseFloat(valorAdicionado);
+                        if (isNaN(valorAdicionado) || valorAdicionado <= 0) {
+                            Swal.fire('Erro', 'Insira um valor válido!', 'error');
+                            return;
+                        }
+                        db.ref(`emprestimos/${id}`).once("value", (snapshot) => {
+                            let data = snapshot.val();
+                            let novoTotalPagar = valorAdicionado * 1.2; // Considerando juros de 20%
+                            let historico = data.historicoAdicoes || [];
+                            historico.push(`${new Date().toLocaleDateString()} - Novo Empréstimo: ${valorAdicionado}`);
+                            
+                            db.ref(`emprestimos/${id}`).update({ 
+                                valor: valorAdicionado, 
+                                totalPagar: novoTotalPagar, 
+                                status: "Pendente", // Atualiza o status para Pendente
+                                historicoAdicoes: historico 
+                            });
+                            
+                            // Atualiza o saldo disponível
+                            let saldoAtual = parseFloat(document.getElementById("saldoDisponivel").innerText);
+                            let novoSaldo = saldoAtual - valorAdicionado;
+                            if (novoSaldo < 0) {
+                                Swal.fire('Erro', 'Saldo insuficiente para adicionar este valor!', 'error');
+                                return;
+                            }
+                            db.ref("saldoDisponivel").set(novoSaldo); // Atualiza o saldo no Firebase
+
+                            // Atualiza o saldo disponível na interface
+                            atualizarSaldoDisponivel();
+                        });
+                    }
+                });
+            } else {
+                Swal.fire({
+                    title: 'Adicionar Valor',
+                    input: 'number',
+                    showCancelButton: true,
+                    confirmButtonText: 'Adicionar',
+                    preConfirm: (valorAdicionado) => {
+                        valorAdicionado = parseFloat(valorAdicionado);
+                        if (isNaN(valorAdicionado) || valorAdicionado <= 0) {
+                            Swal.fire('Erro', 'Insira um valor válido!', 'error');
+                            return;
+                        }
+                        db.ref(`emprestimos/${id}`).once("value", (snapshot) => {
+                            let data = snapshot.val();
+                            let historico = data.historicoAdicoes || [];
+                            historico.push(`${new Date().toLocaleDateString()} - Adicionado: ${valorAdicionado}`);
+                            
+                            // Atualiza o saldo disponível
+                            let saldoAtual = parseFloat(document.getElementById("saldoDisponivel").innerText);
+                            let novoSaldo = saldoAtual - valorAdicionado;
+                            if (novoSaldo < 0) {
+                                Swal.fire('Erro', 'Saldo insuficiente para adicionar este valor!', 'error');
+                                return;
+                            }
+                            db.ref("saldoDisponivel").set(novoSaldo); // Atualiza o saldo no Firebase
+
+                            db.ref(`emprestimos/${id}`).update({ 
+                                valor: data.valor + valorAdicionado, 
+                                totalPagar: (data.valor + valorAdicionado) * 1.2, 
+                                historicoAdicoes: historico 
+                            });
+                            
+                            // Atualiza o saldo disponível na interface
+                            atualizarSaldoDisponivel();
+                        });
+                    }
+                });
+            }
         }
 
         function excluirEmprestimo(id) {
@@ -348,6 +589,7 @@
                 if (result.isConfirmed) {
                     db.ref(`emprestimos/${id}`).remove().then(() => {
                         Swal.fire('Excluído!', 'O empréstimo foi excluído com sucesso.', 'success');
+                        atualizarSaldoDisponivel(); // Atualiza o saldo disponível após exclusão
                     }).catch((error) => {
                         Swal.fire('Erro!', 'Ocorreu um erro ao excluir o empréstimo.', 'error');
                     });
@@ -367,7 +609,28 @@
             fotoPerfilZoom.style.display = "none"; // Esconde a imagem em zoom
         }
 
-        window.onload = carregarEmprestimos;
+        function editarCliente(id) {
+            Swal.fire({
+                title: 'Deseja editar os dados do cliente?',
+                showCancelButton: true,
+                confirmButtonText: 'Sim',
+                cancelButtonText: 'Não'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    db.ref(`emprestimos/${id}`).once("value", (snapshot) => {
+                        let data = snapshot.val();
+                        document.getElementById("nome").value = data.nome;
+                        document.getElementById("valor").value = data.valor;
+                        // Você pode adicionar mais campos conforme necessário
+                    });
+                }
+            });
+        }
+
+        window.onload = function() {
+            carregarEmprestimos();
+            atualizarSaldoDisponivel();
+        };
     </script>
 </body>
 </html>
